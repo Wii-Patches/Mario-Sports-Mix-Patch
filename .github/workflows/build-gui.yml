@@ -99,7 +99,7 @@ jobs:
             $BINS --distpath pyinst_dist tools/gui.py
           cp wit-gpl-2.0.txt "pyinst_dist/MarioSportsMix-Patcher.app/Contents/Resources/wit-gpl-2.0.txt"
           cd pyinst_dist
-          zip -qr "../MarioSportsMix-Patch-${{ matrix.target }}.zip" MarioSportsMix-Patcher.app
+          zip -qr "../MarioSportsMix-ISO-Patcher-${{ matrix.target }}.zip" MarioSportsMix-Patcher.app
 
       - name: Build app (Linux)
         if: matrix.target == 'linux-x86_64'
@@ -112,7 +112,7 @@ jobs:
             $BINS --distpath pyinst_dist tools/gui.py
           cp wit-gpl-2.0.txt pyinst_dist/MarioSportsMix-Patcher/
           cd pyinst_dist
-          tar -czf "../MarioSportsMix-Patch-${{ matrix.target }}.tar.gz" MarioSportsMix-Patcher
+          tar -czf "../MarioSportsMix-ISO-Patcher-${{ matrix.target }}.tar.gz" MarioSportsMix-Patcher
 
       - name: Build app (Windows)
         if: matrix.target == 'windows-x86_64'
@@ -127,20 +127,20 @@ jobs:
             $BINS --distpath pyinst_dist tools/gui.py
           cp wit-gpl-2.0.txt pyinst_dist/MarioSportsMix-Patcher/
           cd pyinst_dist
-          7z a "../MarioSportsMix-Patch-${{ matrix.target }}.zip" MarioSportsMix-Patcher \
-            || powershell -Command "Compress-Archive -Path MarioSportsMix-Patcher -DestinationPath ../MarioSportsMix-Patch-${{ matrix.target }}.zip"
+          7z a "../MarioSportsMix-ISO-Patcher-${{ matrix.target }}.zip" MarioSportsMix-Patcher \
+            || powershell -Command "Compress-Archive -Path MarioSportsMix-Patcher -DestinationPath ../MarioSportsMix-ISO-Patcher-${{ matrix.target }}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MarioSportsMix-Patch-${{ matrix.target }}
-          path: MarioSportsMix-Patch-${{ matrix.target }}.*
+          name: MarioSportsMix-ISO-Patcher-${{ matrix.target }}
+          path: MarioSportsMix-ISO-Patcher-${{ matrix.target }}.*
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: MarioSportsMix-Patch-${{ matrix.target }}.*
+          files: MarioSportsMix-ISO-Patcher-${{ matrix.target }}.*
 
   patch-files:
     needs: check
