@@ -141,35 +141,3 @@ jobs:
         with:
           generate_release_notes: true
           files: MarioSportsMix-ISO-Patcher-${{ matrix.target }}.*
-
-  patch-files:
-    needs: check
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # The per-region filenames (RMKE01, RMKP01, RMKJ01) are the disc ids; keep them.
-      - name: Zip Gecko codes
-        run: zip -qr MarioSportsMix-Patch-Gecko-Codes.zip codes
-
-      - name: Zip Riivolution patches
-        run: zip -qr MarioSportsMix-Patch-Riivolution.zip riivolution
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MarioSportsMix-Patch-Gecko-Codes
-          path: MarioSportsMix-Patch-Gecko-Codes.zip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MarioSportsMix-Patch-Riivolution
-          path: MarioSportsMix-Patch-Riivolution.zip
-
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            MarioSportsMix-Patch-Gecko-Codes.zip
-            MarioSportsMix-Patch-Riivolution.zip
