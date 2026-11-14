@@ -23,7 +23,7 @@ CREDIT = {
 BLURB = {
     'cc': ['Play with a Classic Controller: left stick steers, buttons mapped as Wii Remote held sideways.',
            'Needs a Wii Remote with a Classic Controller attached.'],
-    'gc': ['Play with GameCube controllers: port N drives Wii Remote N (a Wii Remote must still be connected).'],
+    'gc': ['Play with GameCube controllers: port N drives Wii Remote N (no Wii Remote needed).'],
 }
 COMBINED_WARNING = [
     '*These codes keep a few helper routines and variables in low memory at 0x80001820-0x80003000.',

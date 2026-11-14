@@ -24,7 +24,7 @@ CREDIT = {
 BLURB = {
     'cc': ['Play with a Classic Controller: left stick steers, buttons mapped as Wii Remote held sideways.',
            'Needs a Wii Remote with a Classic Controller attached.'],
-    'gc': ['Play with a GameCube controller in port 1 (a Wii Remote must still be connected).'],
+    'gc': ['Play with a GameCube controller in port 1 (no Wii Remote needed).'],
     'sd': ['Lets the custom-soundtrack feature read SDHC cards (over 2 GB).',
            'On a real Wii the game must also run under an IOS that supports SDHC (e.g. IOS 58).'],
 }

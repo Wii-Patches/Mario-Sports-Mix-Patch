@@ -14,7 +14,9 @@ from sig import find_unique
 KPAD_EARLY = (0x8030FCF4, 8, 8)      # KPADRead: `lbz r0,0x17b(r21)`, "any samples queued?"
 KPAD_LOCKED = (0x8030FD14, 8, 8)     # KPADRead: `lbz r18,0x17b(r21)`, right after OSDisableInterrupts
 SI_SET_XY = (0x802B13E0, 0, 14)      # SISetXY: its `lis/addi` pair names the SDK's SI state struct
-HOOKS = (('early', KPAD_EARLY, 0x8815017B, 'lbz 0,0x17b(21)', 0),     # lbz r0,0x17b(r21)
+WPAD_PROBE = (0x802CA410, 0, 12)     # WPADProbe entry: `stwu r1,-16(r1)`
+HOOKS = (('probe', WPAD_PROBE, 0x9421FFF0, 'stwu 1,-16(1)', 2),        # stwu r1,-16(r1)
+         ('early', KPAD_EARLY, 0x8815017B, 'lbz 0,0x17b(21)', 0),     # lbz r0,0x17b(r21)
          ('locked', KPAD_LOCKED, 0x8A55017B, 'lbz 18,0x17b(21)', 1))   # lbz r18,0x17b(r21)
 USA_DOL = None
 EXTRA_DEFINES = {}                   # lab builds: {'DEBUG_COUNTERS': 0x80002FF0}
@@ -45,6 +47,15 @@ def si_shadow(dol, set_xy):
     return ((hi << 16) + lo + 4) & 0xFFFFFFFF
 
 
+def wpad_cb(dol, probe):
+    """WPAD's table of per-channel control block pointers, from WPADProbe's `lis r5,hi; ...; addi r5,r5,lo`."""
+    w = [_word(dol, probe + 4 * i) for i in range(6)]
+    if (w[2] >> 16) != 0x3CA0 or (w[5] >> 16) != 0x38A5 or w[4] != 0x5460103A:
+        raise SystemExit('WPADProbe does not look as expected')
+    lo = w[5] & 0xFFFF
+    return (((w[2] & 0xFFFF) << 16) + (lo - 0x10000 if lo & 0x8000 else lo)) & 0xFFFFFFFF
+
+
 def build(region, dol):
     usa = dol if region == 'RMKE01' else USA_DOL
     set_xy = SI_SET_XY[0] if region == 'RMKE01' else find_unique(usa, dol, *SI_SET_XY)
@@ -54,9 +65,12 @@ def build(region, dol):
         site = sig[0] if region == 'RMKE01' else find_unique(usa, dol, *sig)
         if _word(dol, site) != orig:
             raise SystemExit('%s: KPADRead site 0x%08X is 0x%08X' % (region, site, _word(dol, site)))
-        blob = asm.words(asm.compile_hook(_read('gc.c'), _read('gc_stub.s').replace('@DISPLACED@', insn), cur,
-                                          dict({'SHADOW': shadow, 'MODE': mode}, **EXTRA_DEFINES))) + [0]
-        note = {'early': 'KPADRead, before the empty-ring bail-out: SI poller on; queue a pad sample if the remote sent none',
+        defs = {'SHADOW': shadow, 'MODE': mode}
+        if name == 'probe':
+            defs['WPADCB'] = wpad_cb(dol, site)
+        stub = _read('gc_probe_stub.s' if name == 'probe' else 'gc_stub.s').replace('@DISPLACED@', insn)
+        blob = asm.words(asm.compile_hook(_read('gc.c'), stub, cur, dict(defs, **EXTRA_DEFINES))) + [0]
+        note = {'probe': 'WPADProbe: no Wii Remote but a GameCube pad on that port -> connected, Classic Controller','early': 'KPADRead, before the empty-ring bail-out: queue a pad sample if the remote sent none (or there is no remote)',
                 'locked': 'KPADRead, interrupts off: rewrite the queued samples as Classic Controller samples'}[name]
         ops.append(Hook(site, orig, blob, cur, note=note))
         cur += (len(blob) * 4 + 15) & ~15

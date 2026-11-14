@@ -12,12 +12,17 @@
 
 ## How the GameCube pad works
 
-The game links the Wii SDK's KPAD/WPAD but not PAD. KPAD keeps, per channel, a ring of 0x42-byte samples.
-`KPADRead` is hooked twice:
+The game links the Wii SDK's KPAD/WPAD but not PAD. KPAD keeps, per channel, a ring of 0x42-byte samples
+(16 in the struct, plus a u32 count of extra ones at `+0x5A4` behind the pointer at `+0x5A0`). Three hooks:
 
-1. **early**, before it gives up on an empty ring: enables SI auto-polling (Wii SI registers are at `0xCD006400`; the
-   `0xCC` alias used on GameCube is dropped on a console), reads the pad, and queues a sample if the remote sent none;
-2. **locked**, right after `OSDisableInterrupts`: rewrites every queued sample as a Classic Controller sample
+1. **probe**, at the entry of `WPADProbe`: keeps SI auto-polling on (Wii SI registers are at `0xCD006400`; the
+   `0xCC` alias used on GameCube is dropped on a console). If the channel has no Wii Remote (WPAD control block
+   status -1 or device type 253) but a pad answers on the same SI port, it returns 0 ("connected") with device
+   type 2 (Classic Controller). `KPADRead` probes every channel every frame before anything else and gives up on
+   -1, which is why the pad did nothing without a remote before this hook existed. A real remote always wins;
+2. **early** in `KPADRead`, before it gives up on an empty ring: queues a copy of the last sample if the remote
+   sent none this frame (or there is no remote);
+3. **locked**, right after `OSDisableInterrupts`: rewrites every queued sample as a Classic Controller sample
    (extension type 2, format 7), so a remote interrupt cannot slip a plain sample in.
 
 Vague Rant's hooks downstream then see a normal Classic Controller. The hook code is position-independent and uses
@@ -37,9 +42,15 @@ python3 lab/t_cc.py RMKE01              # Classic Controller: every button and s
 python3 lab/t_gc.py RMKE01              # GameCube pad
 ```
 
-Open item: in long runs a sampling test occasionally sees one frame with no buttons held. Debug counters built into the
-hook (`-DDEBUG_COUNTERS`) show every queued sample is overlaid and no pad read is rejected, so this looks like a
-test-side artefact of halting the CPU over GDB, but it is not proven.
+`lab/t_play.py` drives the menus with the pad and saves Dolphin screenshots to `work/shots/`; `lab/t_hotplug.py`
+boots with the Wii Remote disconnected and connects it mid-menu (Dolphin's connect hotkey on its own pipe).
+`LAB_IMAGE=<extracted disc>/sys/main.dol` boots an extracted disc instead of a rebuilt `.wbfs`, and `LAB_REMOTE=`
+(empty) runs `t_gc.py` / `t_gecko.py` with no Wii Remote at all.
+
+Open item: with a Wii Remote connected next to the pad, a sampling test occasionally (about 1 read in 12) sees one
+frame of the remote's own sample (device 0, no buttons). The debug counters (`-DDEBUG_COUNTERS`, `lab/t_counters.py`)
+show every queued sample is rewritten and no pad read is rejected, and with the pad alone it never happens. It may be a
+test-side artefact of halting the CPU over GDB, but that is not proven.
 
 ## Checks
 

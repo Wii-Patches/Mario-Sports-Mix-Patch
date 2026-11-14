@@ -7,7 +7,7 @@ region = sys.argv[1] if len(sys.argv) > 1 else 'RMKE01'
 EXPECT = {'A': 0x800, 'B': 0x80, 'X': 0xC00, 'Y': 0x40, 'Z': 0x2000, 'R': 0x400, 'L': 0x4001, 'Start': 0x10,
           'Up': 8, 'Down': 4, 'Left': 1, 'Right': 2}
 bad = 0
-with Dolphin(os.path.join(ROOT, 'work', 'test_%s.wbfs' % region), gc=True, wiimote='none', region=region) as d:
+with Dolphin(os.environ.get('LAB_IMAGE') or os.path.join(ROOT, 'work', 'test_%s.wbfs' % region), gc=True, wiimote=os.environ.get('LAB_REMOTE', 'none') or None, region=region) as d:
     d.wait_boot(50)
     print('SIPOLL shadow', d.peek(0x804A5444, 4).hex())
     print('idle', d.kpad())

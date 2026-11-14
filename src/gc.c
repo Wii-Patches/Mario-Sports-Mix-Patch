@@ -7,17 +7,23 @@
  * stick and pointer hooks, the game's own controller checks -- then sees an
  * ordinary Classic Controller.
  *
- * Two hooks in KPADRead (r21 = the channel's KPAD struct, r25 = the channel),
- * the same code built with a different MODE:
+ * Three hooks, the same code built with a different MODE:
+ *   MODE_PROBE  at the entry of WPADProbe: a channel with no Wii Remote but a
+ *               GameCube pad on the same port reports "connected, Classic
+ *               Controller", so KPADRead (and the game) go on to read it.  A
+ *               real remote always wins.
+ * and two in KPADRead (r21 = the channel's KPAD struct, r25 = the channel):
  *   MODE_EARLY  at "are any samples queued?", before KPADRead gives up on an
- *               empty ring: runs the poller and, if the remote sent nothing
- *               this frame, queues a sample for the pad;
+ *               empty ring: if the remote sent nothing this frame (or there is
+ *               no remote), queues a copy of the last sample;
  *   MODE_LOCKED just after KPADRead has disabled interrupts to take the samples:
  *               rewrites every queued sample.  Doing it here, not earlier, means
  *               the remote's interrupt cannot slip a plain sample in between.
+ * The SI poller runs in MODE_PROBE: KPADRead calls WPADProbe before either.
  *
  * Self-contained: no globals, no calls into the game.  Built with
- *   -DSHADOW=<address of the SDK's copy of SIPOLL>  -DMODE=<0 early, 1 locked>
+ *   -DSHADOW=<address of the SDK's copy of SIPOLL>  -DMODE=<0 early, 1 locked, 2 probe>
+ *   -DWPADCB=<address of WPAD's per-channel control block pointers> (probe only)
  *
  * The Wii's SI registers sit at 0xCD006400, not the 0xCC006400 the GameCube
  * (and Dolphin, which mirrors both) uses: stores through the 0xCC alias are
@@ -41,7 +47,7 @@ typedef signed short s16;
 #define K_WRITE 0x17A  /* next ring slot to write */
 #define K_COUNT 0x17B  /* samples queued and not yet read */
 #define K_RING 0x180   /* 16 samples of 0x42 bytes ... */
-#define K_XRING 0x5A0  /* ... plus K_XCOUNT more at this pointer */
+#define K_XRING 0x5A0  /* ... plus K_XCOUNT (a u32) more at this pointer */
 #define K_XCOUNT 0x5A4
 #define SAMPLE 0x42
 #define S_MARK 0x41 /* spare byte after the format byte: tags samples this hook wrote */
@@ -185,6 +191,13 @@ static inline u8 *slot(u8 *k, u32 i)
 
 #define MODE_EARLY 0
 #define MODE_LOCKED 1
+#define MODE_PROBE 2
+
+/* GameCube pad answering on this port: no error, origin bit set */
+static inline int pad_ok(u32 h)
+{
+    return !(h & 0x80000000u) && (h & 0x00800000u);
+}
 
 #ifdef DEBUG_COUNTERS /* lab builds only: calls and rejected pad reads, per mode, at DEBUG_COUNTERS */
 #define DBG(i) (((volatile u32 *)DEBUG_COUNTERS)[(i)]++)
@@ -192,53 +205,71 @@ static inline u8 *slot(u8 *k, u32 i)
 #define DBG(i) ((void)0)
 #endif
 
+#if MODE == MODE_PROBE
+/* WPAD control block: connection status (-1 = none) and device type (253 = none) */
+#define W_STATUS 0x900
+#define W_DEVTYPE 0x905
+
+/* Returns 1 when the call is answered here (WPADProbe then returns 0, "connected"). */
+int gc_hook(u32 chan, u32 *type)
+{
+    u8 *w;
+
+    if (chan > 3)
+        return 0;
+    poller(); /* KPADRead probes every channel every frame, so this keeps SI polling on */
+    w = ((u8 **)WPADCB)[chan];
+    if (w && *(int *)(w + W_STATUS) != -1 && w[W_DEVTYPE] != 253)
+        return 0; /* a real Wii Remote */
+    if (!pad_ok(SI_INH(chan)))
+        return 0;
+    if (type)
+        *type = 2; /* Classic Controller */
+    return 1;
+}
+#else
 void gc_hook(u8 *k, u32 chan)
 {
-    u32 h, l, msr = 0, total, idx, cnt, n;
+    u32 h, l, total, idx, cnt, n;
 
-    (void)msr;
     if (chan > 3)
         return;
     DBG(MODE * 4);
-#if MODE == MODE_EARLY
-    poller();
-#endif
     h = SI_INH(chan);
     l = SI_INL(chan);
-    if ((h & 0x80000000u) || !(h & 0x00800000u)) {
+    if (!pad_ok(h)) {
         DBG(MODE * 4 + 1);
         return; /* error, or no pad answering */
     }
-
-#if MODE == MODE_EARLY
-    msr = irq_off();
-#endif
-    total = 16 + k[K_XCOUNT];
+    total = 16 + *(u32 *)(k + K_XCOUNT);
     idx = k[K_WRITE];
     cnt = k[K_COUNT];
-    if (idx < total) {
+    if (idx >= total)
+        return;
 #if MODE == MODE_EARLY
-        if (cnt == 0) {
-            /* no remote sample this frame: queue a copy of the last one */
+    (void)l;
+    (void)n;
+    if (cnt == 0) {
+        /* no remote sample this frame: queue a copy of the last one (MODE_LOCKED rewrites it) */
+        u32 msr = irq_off();
+        if (k[K_COUNT] == 0) {
             u8 *src = slot(k, (idx + total - 1) % total), *dst = slot(k, idx);
-            u32 i;
-            for (i = 0; i < SAMPLE; i++)
-                dst[i] = src[i];
+            for (n = 0; n < SAMPLE; n++)
+                dst[n] = src[n];
             k[K_WRITE] = (idx + 1) % total;
-            k[K_COUNT] = cnt = 1;
-            idx = k[K_WRITE];
+            k[K_COUNT] = 1;
         }
-#endif
-        for (n = 1; n <= cnt && n <= total; n++) {
-            u8 *s = slot(k, (idx + total - n) % total);
-            if (s[S_EXT] != 2 || s[S_MARK] == MARK) { /* a real Classic Controller keeps priority */
-                overlay(s, h, l);
-                DBG(MODE * 4 + 2);
-            } else
-                DBG(MODE * 4 + 3);
-        }
+        irq_restore(msr);
     }
-#if MODE == MODE_EARLY
-    irq_restore(msr);
+#else
+    for (n = 1; n <= cnt && n <= total; n++) {
+        u8 *s = slot(k, (idx + total - n) % total);
+        if (s[S_EXT] != 2 || s[S_MARK] == MARK) { /* a real Classic Controller keeps priority */
+            overlay(s, h, l);
+            DBG(MODE * 4 + 2);
+        } else
+            DBG(MODE * 4 + 3);
+    }
 #endif
 }
+#endif

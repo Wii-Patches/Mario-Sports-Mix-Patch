@@ -43,8 +43,9 @@ The patched disc is the recommended way. The patches keep a few helper routines 
 
 ## GameCube controller
 
-Port *N* plays as Wii Remote *N*. **A Wii Remote must still be connected** (the game's pairing / player slots
-are driven by it), and the pad should be plugged in before the game boots.
+Port *N* plays as Wii Remote *N*. No Wii Remote is needed: a port with a pad and no remote shows up to the game
+as a Wii Remote with a Classic Controller. If a Wii Remote is connected on that channel too, it keeps working
+alongside the pad.
 
 | GameCube | Plays as Classic Controller |
 |---|---|
@@ -66,13 +67,16 @@ The Classic Controller then behaves exactly as Vague Rant's codes define it.
 |---|---|---|---|
 | Classic Controller - all buttons, sticks | verified (Dolphin) | verified (Dolphin) | verified (Dolphin) |
 | GameCube controller - all buttons, sticks | verified (Dolphin) | verified (Dolphin) | verified (Dolphin) |
+| GameCube controller - no Wii Remote, menus to character select | verified (Dolphin) | buttons verified (Dolphin) | buttons verified (Dolphin) |
 | Patcher on a real disc image | - | - | verified (Dolphin boots result, re-run is a no-op) |
 | Real console | **not tested** | **not tested** | **not tested** |
 
 "Verified" means: scripted input into Dolphin, the game's own KPAD state read back over Dolphin's GDB stub
 (`lab/`, see `docs/TECHNICAL.md`). Nobody has played it on hardware yet - reports welcome.
 
-Known limits: a Wii Remote must stay connected in GameCube mode; unplugging the pad mid-game falls back to the remote.
+Known limits: unplugging the pad mid-game falls back to the Wii Remote on that channel (or to "no controller").
+With a Wii Remote *and* a pad on the same channel, the lab occasionally reads one frame of the remote's own
+input instead of the pad's (see `docs/TECHNICAL.md`); a pad on its own does not do this.
 
 ## Releasing
 

@@ -6,7 +6,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 region = sys.argv[1] if len(sys.argv) > 1 else 'RMKE01'
 disc = [f for f in os.listdir(os.path.join(ROOT, 'games')) if f.endswith('.wbfs') and {'RMKE01': 'USA', 'RMKP01': 'Europe', 'RMKJ01': 'Japan'}[region] in f][0]
 ini = open(os.path.join(ROOT, 'codes', region + '.ini')).read().split('\n', 1)[1]   # drop [Gecko]
-with Dolphin(os.path.join(ROOT, 'games', disc), gc=True, wiimote='none', region=region, gecko=ini) as d:
+with Dolphin(os.path.join(ROOT, 'games', disc), gc=True, wiimote=os.environ.get('LAB_REMOTE', 'none') or None, region=region, gecko=ini) as d:
     d.wait_boot(50)
     print('idle', d.kpad())
     for b in ('A', 'B', 'Start'):

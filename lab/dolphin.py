@@ -96,13 +96,13 @@ def write_config(user, gc, wiimote, video_dump=False, gecko=None, game_id=None):
     for d in ('Config', 'GameSettings', 'Pipes'):
         os.makedirs(os.path.join(user, d), exist_ok=True)
     pipes = os.path.join(user, 'Pipes')
-    for n in ('gc', 'wii'):
+    for n in ('gc', 'wii', 'hk'):
         p = os.path.join(pipes, n)
         if os.path.exists(p):
             os.unlink(p)
         os.mkfifo(p)
     open(os.path.join(user, 'Config', 'Dolphin.ini'), 'w').write(
-        "[General]\nGDBPort = %d\n[Input]\nBackgroundInput = True\n[Interface]\nConfirmStop = False\nUsePanicHandlers = %s\n"
+        "[General]\nGDBPort = %d\nHotkeysRequireFocus = False\n[Input]\nBackgroundInput = True\n[Interface]\nConfirmStop = False\nUsePanicHandlers = %s\n"
         "[Core]\nMMU = %s\nCPUThread = %s\nCPUCore = 4\nEnableDebugging = True\nEnableCheats = True\n"
         "WiimoteContinuousScanning = False\nWiimoteControllerInterface = False\n"
         "SIDevice0 = %d\nSIDevice1 = 0\nSIDevice2 = 0\nSIDevice3 = 0\n"
@@ -118,7 +118,7 @@ def write_config(user, gc, wiimote, video_dump=False, gecko=None, game_id=None):
     open(os.path.join(user, 'Config', 'GCPadNew.ini'), 'w').write(pad)
 
     open(os.path.join(user, 'Config', 'Logger.ini'), 'w').write(
-        '[Options]\nVerbosity = 3\nWriteToFile = True\nWriteToConsole = False\n[Logs]\nOSREPORT = True\nBOOT = True\nCORE = True\nPOWERPC = True\nMEMMAP = True\nWII_IPC = True\nWIIMOTE = True\n')
+        '[Options]\nVerbosity = 3\nWriteToFile = True\nWriteToConsole = False\n[Logs]\nMASTER = True\nOSREPORT = True\nBOOT = True\nCORE = True\nPOWERPC = True\nMEMMAP = True\nWII_IPC = True\nWIIMOTE = True\n')
     if gecko:
         # Gecko codes for one game, all enabled: `gecko` is a cheat-file body ($Name lines + code lines)
         names = [l[1:].strip() for l in gecko.splitlines() if l.startswith('$')]
@@ -138,6 +138,9 @@ def write_config(user, gc, wiimote, video_dump=False, gecko=None, game_id=None):
     else:
         w = "[Wiimote1]\nSource = 0\n"
     open(os.path.join(user, 'Config', 'WiimoteNew.ini'), 'w').write(w)
+    # hotkeys on their own pipe: hk A toggles Wii Remote 1's connection (hot-plug tests)
+    open(os.path.join(user, 'Config', 'Hotkeys.ini'), 'w').write(
+        "[Hotkeys]\nDevice = Pipe/0/hk\nWii/Connect Wii Remote 1 = `Button A`\nGeneral/Take Screenshot = `Button B`\n")
 
 
 class Dolphin:
@@ -151,6 +154,7 @@ class Dolphin:
         self.g = None
         self.gc = Pipe(os.path.join(self.user, 'Pipes', 'gc'))
         self.wii = Pipe(os.path.join(self.user, 'Pipes', 'wii'))
+        self.hk = Pipe(os.path.join(self.user, 'Pipes', 'hk'))
 
     def __enter__(self):
         shutil.rmtree(self.user, ignore_errors=True)
@@ -170,6 +174,10 @@ class Dolphin:
             self.gc.open()
         if self.wii_on:
             self.wii.open()
+        try:
+            self.hk.open(timeout=5)
+        except TimeoutError:
+            self.hk = None
         return self
 
     def __exit__(self, *a):
